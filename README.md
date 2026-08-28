@@ -81,9 +81,10 @@ curl -X POST http://127.0.0.1:7870/api/knowledge \
 
 ## Gizlilik ve gerçekçi sınır
 
-Ses dosyaları `data/audio`, bilgi tabanı `data/knowledge`, modeller `models` altında kalır;
-bu dizinlerin içeriği Git'e alınmaz. Sunucu varsayılan olarak yalnız `127.0.0.1` üzerinde
-dinler. Kodda bulut model çağrısı yoktur; Ollama da loopback adresindedir.
+Ses dosyaları `data/audio`, bilgi tabanı `data/knowledge`, STT/TTS modelleri `models`
+altında kalır; Qwen ağırlığı Ollama'nın cihazdaki yerel model deposundadır. Bu veriler Git'e
+alınmaz. Sunucu varsayılan olarak yalnız `127.0.0.1` üzerinde dinler. Kodda bulut model
+çağrısı yoktur; Ollama da loopback adresindedir.
 
 Qwen3.5 9B iyi bir yerel genel asistandır fakat GPT-5.6 Sol kapasitesini yüzde yüz yerelde,
 16 GB bir cihazda eşitlemek fiziksel olarak mümkün değildir. AICOM belirsiz veya güncel
