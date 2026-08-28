@@ -54,6 +54,13 @@ body {
 .brand-mark { width: 13px; height: 13px; border: 2px solid var(--cyan); border-radius: 50%; box-shadow: 0 0 18px var(--cyan); }
 
 button, input { font: inherit; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 5px; }
+button:disabled { cursor: wait; opacity: .45; }
+.topbar-actions { display: flex; align-items: center; gap: 20px; }
+.language-switch { display: flex; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 9px; background: rgba(15,21,35,.65); }
+.language-switch button { min-width: 34px; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .05em; cursor: pointer; transition: color .2s, background .2s; }
+.language-switch button:hover { color: var(--ink); }
+.language-switch button[aria-pressed="true"] { color: var(--cyan); background: rgba(112,229,255,.1); }
 .health { border: 0; background: transparent; color: var(--muted); display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 12px; }
 .health > span:first-child { width: 7px; height: 7px; border-radius: 50%; background: #e8b35f; box-shadow: 0 0 10px currentColor; }
 .health.ready > span:first-child { background: var(--green); }
@@ -87,7 +94,9 @@ h1 em { font-style: normal; color: transparent; background: linear-gradient(90de
 .orbit-two { inset: 0; border-color: rgba(158,140,255,.1); }
 .orb-wrap[data-state="listening"] .orbit { animation: breathe 1.9s ease-in-out infinite; }
 .orb-wrap[data-state="recording"] .orbit { border-color: rgba(112,229,255,.65); animation: pulse .8s ease-out infinite; }
-.orb-wrap[data-state="thinking"] .orbit-one { border-top-color: var(--cyan); animation: spin 1.2s linear infinite; }
+.orb-wrap[data-state="thinking"] .orbit-one,
+.orb-wrap[data-state="connecting"] .orbit-one,
+.orb-wrap[data-state="switching"] .orbit-one { border-top-color: var(--cyan); animation: spin 1.2s linear infinite; }
 .orb-wrap[data-state="thinking"] .orbit-two { border-bottom-color: var(--violet); animation: spin 2s linear infinite reverse; }
 .orb-wrap[data-state="speaking"] .orb { box-shadow: inset 0 0 30px rgba(158,140,255,.27), 0 0 70px rgba(158,140,255,.28); }
 .orb-wrap[data-state="speaking"] .orbit { animation: breathe .65s ease-in-out infinite alternate; }
@@ -106,7 +115,7 @@ h1 em { font-style: normal; color: transparent; background: linear-gradient(90de
 .composer svg { width: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 footer { height: 48px; display: flex; justify-content: space-between; color: #515b6f; font-size: 9px; letter-spacing: .1em; border-top: 1px solid var(--line); padding-top: 16px; }
-.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #161d2c; color: var(--ink); font-size: 12px; opacity: 0; pointer-events: none; transition: .2s; }
+.toast { position: fixed; left: 50%; bottom: 28px; width: max-content; max-width: calc(100% - 32px); transform: translate(-50%, 20px); padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #161d2c; color: var(--ink); font-size: 12px; line-height: 1.5; opacity: 0; pointer-events: none; transition: .2s; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 dialog { width: min(520px, calc(100% - 30px)); border: 1px solid var(--line); border-radius: 20px; background: #0d1321; color: var(--ink); padding: 30px; box-shadow: 0 28px 90px #000; }
@@ -118,13 +127,32 @@ dialog h2 { margin: 8px 0 20px; }
 .component.ready i { background: var(--green); }
 .component strong, .component span { display: block; }
 .component span { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.component .component-status { color: var(--muted); font-size: 10px; font-weight: 400; letter-spacing: .03em; }
+.component.ready .component-status { color: var(--green); }
+.health-summary, .health-placeholder { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.health-summary:empty { display: none; }
 
 @media (max-width: 620px) {
   .shell { width: min(100% - 24px, 1040px); }
   .topbar { height: 68px; }
+  .topbar-actions { gap: 10px; }
+  .health { font-size: 10px; gap: 6px; }
+  .brand { gap: 7px; font-size: 13px; }
+  .brand small { display: none; }
   .stage { min-height: calc(100vh - 180px); padding-top: 28px; }
   h1 { font-size: 44px; }
   .message { max-width: 92%; font-size: 14px; }
   footer span:first-child, footer span:last-child { display: none; }
   footer { justify-content: center; }
+}
+
+@media (max-width: 390px) {
+  .health { max-width: 112px; text-align: left; }
+  .health > span:first-child { flex-shrink: 0; }
+  h1 { font-size: 38px; }
+  .lede { max-width: 290px; line-height: 1.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

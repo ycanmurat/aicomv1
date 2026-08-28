@@ -1,41 +1,48 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#070a12" />
-    <title>AICOM — Yerel Sesli Zekâ</title>
+    <title>AICOM — Local Voice Intelligence</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%2370e5ff' stroke-width='4'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="/assets/app.css?v=1" />
+    <link rel="stylesheet" href="/assets/app.css?v=2" />
   </head>
   <body>
     <div class="noise"></div>
     <main class="shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="AICOM ana sayfa">
+        <a class="brand" href="/" aria-label="AICOM home" data-i18n-aria-label="homeLabel">
           <span class="brand-mark"></span>
           <span>AICOM</span>
-          <small>LOCAL</small>
+          <small data-i18n="localBadge">LOCAL</small>
         </a>
-        <button id="healthButton" class="health" type="button">
-          <span id="healthDot"></span><span id="healthText">Sistem kontrol ediliyor</span>
-        </button>
+        <div class="topbar-actions">
+          <button id="healthButton" class="health" type="button" aria-haspopup="dialog">
+            <span id="healthDot" aria-hidden="true"></span>
+            <span id="healthText">Checking local components…</span>
+          </button>
+          <div class="language-switch" role="group" aria-label="Interface and conversation language" data-i18n-aria-label="languageSelector">
+            <button type="button" data-language="en" lang="en" aria-pressed="true" aria-label="Use English" data-i18n-aria-label="englishLanguage" data-i18n-title="englishLanguage">EN</button>
+            <button type="button" data-language="tr" lang="tr" aria-pressed="false" aria-label="Use Turkish" data-i18n-aria-label="turkishLanguage" data-i18n-title="turkishLanguage">TR</button>
+          </div>
+        </div>
       </header>
 
       <section class="stage">
         <div class="intro" id="intro">
-          <p class="eyebrow">CİHAZINDA ÇALIŞAN SESLİ DÜŞÜNCE ORTAĞI</p>
-          <h1>Söyle. Anlasın.<br /><em>Düşünüp konuşsun.</em></h1>
-          <p class="lede">Sesin, konuşmaların ve bilgin bu cihazdan çıkmadan.</p>
+          <p class="eyebrow" data-i18n="eyebrow">A VOICE THINKING PARTNER, ON YOUR DEVICE</p>
+          <h1><span data-i18n="headlineFirst">Talk. Think.</span><br /><em data-i18n="headlineLast">Keep it local.</em></h1>
+          <p class="lede" data-i18n="lede">Your voice, conversations, and knowledge stay on this device.</p>
         </div>
 
-        <div id="conversation" class="conversation" aria-live="polite"></div>
+        <div id="conversation" class="conversation" role="log" aria-live="polite" aria-label="Conversation" data-i18n-aria-label="conversationLabel"></div>
 
         <div class="voice-zone">
           <div id="orbWrap" class="orb-wrap" data-state="idle">
             <div class="orbit orbit-one"></div>
             <div class="orbit orbit-two"></div>
-            <button id="micButton" class="orb" type="button" aria-label="Mikrofonu başlat">
+            <button id="micButton" class="orb" type="button" aria-label="Enable microphone" aria-pressed="false">
               <span class="orb-core"></span>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 15.3a3.4 3.4 0 0 0 3.4-3.4V6.4a3.4 3.4 0 1 0-6.8 0v5.5a3.4 3.4 0 0 0 3.4 3.4Z" />
@@ -43,32 +50,34 @@
               </svg>
             </button>
           </div>
-          <div class="state-line">
-            <strong id="stateText">Başlamak için dokun</strong>
-            <span id="detailText">Mikrofon yalnız yerel işlem için kullanılır</span>
+          <div class="state-line" role="status" aria-live="polite">
+            <strong id="stateText">Tap to start</strong>
+            <span id="detailText">The microphone is used for local processing only</span>
           </div>
         </div>
       </section>
 
       <form id="textForm" class="composer">
-        <input id="textInput" autocomplete="off" placeholder="Ya da yazarak konuş…" maxlength="8000" />
-        <button type="submit" aria-label="Gönder">
-          <svg viewBox="0 0 24 24"><path d="m5 12 14-7-4.2 14-3.1-5.2L5 12Zm6.7 1.8L19 5" /></svg>
+        <input id="textInput" autocomplete="off" placeholder="Or type a message…" aria-label="Message AICOM" data-i18n-placeholder="inputPlaceholder" data-i18n-aria-label="inputLabel" maxlength="8000" />
+        <button id="sendButton" type="submit" aria-label="Send message" data-i18n-aria-label="sendLabel" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4.2 14-3.1-5.2L5 12Zm6.7 1.8L19 5" /></svg>
         </button>
       </form>
 
       <footer>
-        <span>16 kHz yerel ses hattı</span><span id="metrics">Hazır</span><span>Ağsız çalışma</span>
+        <span data-i18n="localAudio">16 kHz local audio</span><span id="metrics">Ready</span><span data-i18n="offline">Offline processing</span>
       </footer>
     </main>
 
-    <dialog id="healthDialog">
-      <button id="closeHealth" class="close" type="button">Kapat</button>
-      <p class="eyebrow">YEREL SİSTEM</p>
-      <h2>Bileşen durumu</h2>
+    <dialog id="healthDialog" aria-labelledby="healthTitle">
+      <button id="closeHealth" class="close" type="button" data-i18n="close">Close</button>
+      <p class="eyebrow" data-i18n="systemEyebrow">LOCAL SYSTEM</p>
+      <h2 id="healthTitle" data-i18n="systemTitle">Component status</h2>
       <div id="healthDetails"></div>
+      <p id="healthSummary" class="health-summary"></p>
     </dialog>
     <div id="toast" class="toast" role="status"></div>
-    <script src="/assets/app.js?v=4" defer></script>
+    <script src="/assets/i18n.js?v=1" defer></script>
+    <script src="/assets/app.js?v=5" defer></script>
   </body>
 </html>

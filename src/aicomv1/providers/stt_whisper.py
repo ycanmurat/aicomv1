@@ -9,6 +9,7 @@ from pathlib import Path
 
 from aicomv1.config import Settings
 from aicomv1.models import ComponentStatus, Transcription
+from aicomv1.prompt import normalize_language
 from aicomv1.providers.base import STTError
 
 _TOKEN = re.compile(r"<\|[^>]+\|>")
@@ -17,8 +18,6 @@ _NO_SPEECH = {
     "altyazı m.k.",
     "altyazı",
     "müzik",
-    "teşekkürler",
-    "izlediğiniz için teşekkürler",
 }
 
 
@@ -46,14 +45,17 @@ class WhisperCppTranscriber:
     def status(self) -> ComponentStatus:
         executable = shutil.which(self.settings.whisper_executable)
         if not executable:
-            return ComponentStatus("stt-whisper", False, "whisper-cli bulunamadı.")
+            return ComponentStatus("stt-whisper", False, "whisper-cli was not found.")
+        if not shutil.which(self.settings.ffmpeg_executable):
+            return ComponentStatus("stt-whisper", False, "ffmpeg was not found.")
         if not self.settings.whisper_model.is_file():
             return ComponentStatus(
-                "stt-whisper", False, f"Model bulunamadı: {self.settings.whisper_model}"
+                "stt-whisper", False, f"Model was not found: {self.settings.whisper_model}"
             )
-        return ComponentStatus("stt-whisper", True, f"Hazır: {self.settings.whisper_model.name}")
+        return ComponentStatus("stt-whisper", True, f"Ready: {self.settings.whisper_model.name}")
 
-    def transcribe(self, audio_path: Path) -> Transcription:
+    def transcribe(self, audio_path: Path, language: str = "tr") -> Transcription:
+        language = normalize_language(language)
         status = self.status()
         if not status.ready:
             raise STTError(status.detail)
@@ -83,19 +85,20 @@ class WhisperCppTranscriber:
                 check=False,
             )
             if normalize.returncode != 0:
-                raise STTError(f"Ses dönüştürülemedi: {normalize.stderr.strip()}")
+                raise STTError(f"Audio conversion failed: {normalize.stderr.strip()}")
+            command = [
+                self.settings.whisper_executable,
+                "-m",
+                str(self.settings.whisper_model),
+                "-f",
+                str(normalized),
+                "-l",
+                language,
+                "-nt",
+                "-np",
+            ]
             result = subprocess.run(
-                [
-                    self.settings.whisper_executable,
-                    "-m",
-                    str(self.settings.whisper_model),
-                    "-f",
-                    str(normalized),
-                    "-l",
-                    "tr",
-                    "-nt",
-                    "-np",
-                ],
+                command,
                 capture_output=True,
                 text=True,
                 timeout=150,
@@ -103,7 +106,7 @@ class WhisperCppTranscriber:
             )
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()[-1000:]
-            raise STTError(f"Whisper çalışmadı: {detail}")
+            raise STTError(f"Whisper failed: {detail}")
         text = _clean_transcript(result.stdout)
         return Transcription(
             text=text,

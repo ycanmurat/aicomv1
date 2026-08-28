@@ -1,5 +1,7 @@
 .DS_Store
 .env
+.env.*
+!.env.example
 .venv/
 .pytest_cache/
 .ruff_cache/
@@ -7,13 +9,13 @@ __pycache__/
 *.py[cod]
 *.log
 
-# Yerel model ve çalışma zamanı dosyaları repoya girmez.
+# Keep local models and downloaded runtimes out of the repository.
 models/*
 !models/.gitkeep
 .runtime/
 .cache/
 
-# Kullanıcıya ait yerel bilgi ve üretilmiş sesler repoya girmez.
+# Keep personal knowledge and generated audio out of the repository.
 data/*
 !data/knowledge/
 data/knowledge/*

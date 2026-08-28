@@ -1,3 +1,5 @@
+import pytest
+
 from aicomv1.text import ClauseSegmenter, clean_spoken_text
 
 
@@ -19,3 +21,11 @@ def test_segmenter_soft_cuts_long_spoken_text() -> None:
     parts.extend(segmenter.finish())
     assert " ".join(parts) == "Bu oldukça uzun, devam eden bir metindir"
     assert len(parts) >= 2
+
+
+@pytest.mark.parametrize(("language", "word"), [("en", "link"), ("tr", "bağlantı")])
+def test_bare_url_speech_is_localized(language: str, word: str) -> None:
+    assert clean_spoken_text("https://example.com", language=language) == word
+    segmenter = ClauseSegmenter(language=language)
+    segmenter.push("https://example.com")
+    assert segmenter.finish() == [word]

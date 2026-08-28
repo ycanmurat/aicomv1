@@ -4,6 +4,7 @@ from pathlib import Path
 
 from aicomv1.config import Settings
 from aicomv1.models import ComponentStatus, Transcription
+from aicomv1.prompt import normalize_language
 from aicomv1.providers.base import Transcriber
 from aicomv1.providers.stt_nemotron import NemotronCppTranscriber
 from aicomv1.providers.stt_whisper import WhisperCppTranscriber
@@ -18,12 +19,12 @@ class AutoTranscriber:
         elif settings.stt_provider == "whisper":
             self.active = whisper
         else:
-            # Türkçe sentetik ve gerçek konuşma denemelerinde Whisper daha doğruydu;
-            # Nemotron düşük gecikme isteyenler için açıkça seçilebilir.
+            # Whisper was more accurate in our Turkish voice tests. Nemotron remains
+            # available as an explicit lower-latency option.
             self.active = whisper if whisper.status().ready else nemotron
 
     def status(self) -> ComponentStatus:
         return self.active.status()
 
-    def transcribe(self, audio_path: Path) -> Transcription:
-        return self.active.transcribe(audio_path)
+    def transcribe(self, audio_path: Path, language: str = "tr") -> Transcription:
+        return self.active.transcribe(audio_path, normalize_language(language))

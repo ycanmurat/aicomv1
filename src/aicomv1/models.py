@@ -26,6 +26,7 @@ class Message:
 @dataclass(slots=True)
 class ConversationSession:
     id: str = field(default_factory=lambda: uuid4().hex)
+    language: str = "en"
     messages: list[Message] = field(default_factory=list)
     summary: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

@@ -14,12 +14,13 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from aicomv1.config import PROJECT_ROOT, Settings
-from aicomv1.engine import AssistantEngine
+from aicomv1.engine import AssistantEngine, EventSink
 from aicomv1.knowledge import KnowledgeStore
 from aicomv1.memory import SessionNotFoundError, SessionStore
+from aicomv1.prompt import normalize_language
 from aicomv1.providers.llm_ollama import OllamaChatProvider
 from aicomv1.providers.stt_auto import AutoTranscriber
 from aicomv1.providers.tts_auto import AutoSynthesizer
@@ -29,6 +30,15 @@ LOGGER = logging.getLogger("aicomv1")
 WEB_ROOT = PROJECT_ROOT / "web"
 MAX_AUDIO_BYTES = 16000 * 2 * 90
 MIN_AUDIO_BYTES = 16000 * 2 // 5
+
+
+class SessionInput(BaseModel):
+    language: str = "en"
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, value: str) -> str:
+        return normalize_language(value)
 
 
 class KnowledgeInput(BaseModel):
@@ -74,8 +84,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             llm_status = await services.llm.status()
             if llm_status.ready:
                 await services.llm.complete(
-                    system_prompt="Yerel model ısınma kontrolü.",
-                    messages=[{"role": "user", "content": "Hazır yaz."}],
+                    system_prompt="Local model warmup check.",
+                    messages=[{"role": "user", "content": "Say ready."}],
                     max_tokens=2,
                 )
             tts_status = await asyncio.to_thread(services.tts.status)
@@ -84,7 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await asyncio.to_thread(services.tts.synthesize, "Hazırım.", warm_path)
                 warm_path.unlink(missing_ok=True)
         except Exception:
-            LOGGER.warning("Arka plan model ısıtması tamamlanamadı", exc_info=True)
+            LOGGER.warning("Background model warmup did not complete", exc_info=True)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -103,11 +113,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return FileResponse(WEB_ROOT / "index.html")
 
     @app.get("/api/health")
-    async def health() -> dict[str, object]:
+    async def health(language: str = "en") -> dict[str, object]:
+        try:
+            language = normalize_language(language)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         llm_status = await services.llm.status()
         stt_status, tts_status = await asyncio.gather(
             asyncio.to_thread(services.stt.status),
-            asyncio.to_thread(services.tts.status),
+            asyncio.to_thread(services.tts.status, language=language),
         )
         components = [llm_status, stt_status, tts_status]
         return {
@@ -117,13 +131,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 for item in components
             ],
             "knowledge_documents": services.knowledge.count(),
-            "privacy": "Yerel ağ dışına çağrı yapılmaz; Ollama 127.0.0.1 üzerinden kullanılır.",
+            "language": language,
+            "languages": ["en", "tr"],
+            "privacy": "Local speech processing; Ollama uses a configurable, loopback-default URL.",
         }
 
     @app.post("/api/sessions")
-    async def create_session() -> dict[str, str]:
-        session = services.sessions.create()
-        return {"id": session.id}
+    async def create_session(item: SessionInput | None = None) -> dict[str, str]:
+        session = services.sessions.create(language=item.language if item else "en")
+        return {"id": session.id, "language": session.language}
 
     @app.delete("/api/sessions/{session_id}", status_code=204)
     async def delete_session(session_id: str) -> None:
@@ -134,12 +150,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             session = services.sessions.get(session_id)
         except SessionNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="Oturum bulunamadı.") from exc
+            raise HTTPException(status_code=404, detail="Session was not found.") from exc
         if session.audio_directory is None:
-            raise HTTPException(status_code=404, detail="Ses bulunamadı.")
+            raise HTTPException(status_code=404, detail="Audio was not found.")
         target = (session.audio_directory / filename).resolve()
         if target.parent != session.audio_directory.resolve() or not target.is_file():
-            raise HTTPException(status_code=404, detail="Ses bulunamadı.")
+            raise HTTPException(status_code=404, detail="Audio was not found.")
         return FileResponse(target, media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
     @app.post("/api/knowledge")
@@ -157,7 +173,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session = services.sessions.get(session_id)
         except SessionNotFoundError:
             await websocket.accept()
-            await websocket.close(code=4404, reason="Oturum bulunamadı")
+            await websocket.close(code=4404, reason="Session was not found")
             return
 
         await websocket.accept()
@@ -165,18 +181,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         connected = True
         audio_buffer = bytearray()
         accepting_audio = False
+        language = session.language
+        audio_language = language
         active_task: asyncio.Task[None] | None = None
         active_cancel: Event | None = None
+        pending_tasks: set[asyncio.Task[None]] = set()
 
-        async def emit(event: dict[str, object]) -> None:
-            if not connected:
+        async def emit(event: dict[str, object], *, cancel: Event | None = None) -> None:
+            if not connected or (cancel is not None and cancel.is_set()):
                 return
+            event = dict(event)
             if event.get("type") == "audio":
                 event["url"] = (
                     f"/api/audio/{session_id}/{event.pop('filename')}?v={uuid4().hex[:8]}"
                 )
             async with send_lock:
+                if not connected or (cancel is not None and cancel.is_set()):
+                    return
                 await websocket.send_text(json.dumps(event, ensure_ascii=False))
+
+        def turn_emitter(turn_id: str, turn_language: str, cancel: Event) -> EventSink:
+            async def emit_turn(event: dict[str, object]) -> None:
+                await emit({**event, "turn_id": turn_id, "language": turn_language}, cancel=cancel)
+
+            return emit_turn
 
         def interrupt_active() -> None:
             nonlocal active_task, active_cancel
@@ -187,39 +215,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             active_task = None
             active_cancel = None
 
-        def launch_text(text: str, *, turn_id: str | None = None) -> None:
+        def launch_text(text: str, *, turn_language: str) -> None:
             nonlocal active_task, active_cancel
             interrupt_active()
-            current_turn = turn_id or uuid4().hex
+            current_turn = uuid4().hex
             active_cancel = Event()
             session.active_cancel = active_cancel
             cancel = active_cancel
+            emit_turn = turn_emitter(current_turn, turn_language, cancel)
 
             async def run() -> None:
                 try:
+                    await emit_turn({"type": "transcript", "text": text})
                     await services.engine.respond(
                         session=session,
                         user_text=text,
                         turn_id=current_turn,
                         cancel=cancel,
-                        emit=emit,
+                        emit=emit_turn,
+                        language=turn_language,
                     )
                 except asyncio.CancelledError:
                     return
                 except Exception as exc:
-                    LOGGER.exception("Yanıt turu başarısız")
-                    await emit({"type": "error", "turn_id": current_turn, "message": str(exc)})
-                    await emit({"type": "state", "state": "listening"})
+                    LOGGER.exception("Text response turn failed")
+                    await emit_turn(
+                        {"type": "error", "code": "response_failed", "message": str(exc)}
+                    )
+                    await emit_turn({"type": "state", "state": "listening"})
 
             active_task = asyncio.create_task(run())
+            pending_tasks.add(active_task)
+            active_task.add_done_callback(pending_tasks.discard)
 
-        def launch_audio(raw_audio: bytes) -> None:
+        def launch_audio(raw_audio: bytes, *, turn_language: str) -> None:
             nonlocal active_task, active_cancel
             interrupt_active()
             turn_id = uuid4().hex
             active_cancel = Event()
             session.active_cancel = active_cancel
             cancel = active_cancel
+            emit_turn = turn_emitter(turn_id, turn_language, cancel)
 
             async def run() -> None:
                 if session.audio_directory is None:
@@ -231,27 +267,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         wav.setsampwidth(2)
                         wav.setframerate(16_000)
                         wav.writeframes(raw_audio)
-                    await emit({"type": "state", "state": "transcribing", "turn_id": turn_id})
-                    transcription = await asyncio.to_thread(services.stt.transcribe, input_path)
+                    await emit_turn({"type": "state", "state": "transcribing"})
+                    transcription = await asyncio.to_thread(
+                        services.stt.transcribe, input_path, turn_language
+                    )
                     if cancel.is_set():
                         return
                     if not transcription.text:
-                        await emit(
+                        await emit_turn(
                             {
                                 "type": "warning",
                                 "turn_id": turn_id,
-                                "message": "Konuşma anlaşılmadı; tekrar deneyin.",
+                                "code": "speech_not_understood",
+                                "message": "Speech was not understood; please try again.",
                             }
                         )
-                        await emit({"type": "state", "state": "listening"})
+                        await emit_turn({"type": "state", "state": "listening"})
                         return
-                    await emit(
+                    await emit_turn(
                         {
                             "type": "transcript",
                             "turn_id": turn_id,
                             "text": transcription.text,
                             "provider": transcription.provider,
                             "transcription_ms": transcription.elapsed_ms,
+                            "language": turn_language,
                         }
                     )
                     await services.engine.respond(
@@ -259,17 +299,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         user_text=transcription.text,
                         turn_id=turn_id,
                         cancel=cancel,
-                        emit=emit,
+                        emit=emit_turn,
+                        language=turn_language,
                     )
                 except asyncio.CancelledError:
                     return
                 except Exception as exc:
-                    LOGGER.exception("Sesli tur başarısız")
-                    await emit({"type": "error", "turn_id": turn_id, "message": str(exc)})
-                    await emit({"type": "state", "state": "listening"})
+                    LOGGER.exception("Voice response turn failed")
+                    await emit_turn(
+                        {"type": "error", "code": "response_failed", "message": str(exc)}
+                    )
+                    await emit_turn({"type": "state", "state": "listening"})
 
             active_task = asyncio.create_task(run())
+            pending_tasks.add(active_task)
+            active_task.add_done_callback(pending_tasks.discard)
 
+        await emit({"type": "language", "language": language})
         await emit({"type": "state", "state": "listening"})
         try:
             while True:
@@ -286,28 +332,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 try:
                     event = json.loads(raw_text)
                 except json.JSONDecodeError:
-                    await emit({"type": "error", "message": "Geçersiz istemci mesajı."})
+                    await emit(
+                        {"type": "error", "code": "invalid_message", "message": "Invalid JSON."}
+                    )
+                    continue
+                if not isinstance(event, dict):
+                    await emit(
+                        {
+                            "type": "error",
+                            "code": "invalid_message",
+                            "message": "Client message must be an object.",
+                        }
+                    )
                     continue
                 event_type = event.get("type")
+                requested_language = language
+                if "language" in event:
+                    try:
+                        requested_language = normalize_language(str(event["language"]))
+                    except ValueError as exc:
+                        await emit(
+                            {"type": "error", "code": "unsupported_language", "message": str(exc)}
+                        )
+                        continue
                 if event_type == "interrupt":
                     interrupt_active()
+                    accepting_audio = False
+                    audio_buffer.clear()
                     await emit({"type": "state", "state": "listening"})
                 elif event_type == "audio.start":
+                    interrupt_active()
+                    language = session.language = requested_language
                     audio_buffer.clear()
                     accepting_audio = True
+                    audio_language = language
                 elif event_type == "audio.commit":
+                    if not accepting_audio:
+                        continue
                     accepting_audio = False
                     if len(audio_buffer) >= MIN_AUDIO_BYTES:
-                        launch_audio(bytes(audio_buffer))
+                        launch_audio(bytes(audio_buffer), turn_language=audio_language)
                     else:
                         await emit({"type": "state", "state": "listening"})
                     audio_buffer.clear()
                 elif event_type == "text":
+                    if not isinstance(event.get("text"), str):
+                        await emit(
+                            {
+                                "type": "error",
+                                "code": "invalid_message",
+                                "message": "Text must be a string.",
+                            }
+                        )
+                        continue
                     text = str(event.get("text", "")).strip()[:8000]
                     if text:
-                        turn_id = uuid4().hex
-                        await emit({"type": "transcript", "turn_id": turn_id, "text": text})
-                        launch_text(text, turn_id=turn_id)
+                        language = session.language = requested_language
+                        accepting_audio = False
+                        audio_buffer.clear()
+                        launch_text(text, turn_language=language)
+                elif event_type == "language.set":
+                    interrupt_active()
+                    language = session.language = requested_language
+                    accepting_audio = False
+                    audio_buffer.clear()
+                    await emit({"type": "language", "language": language})
+                    await emit({"type": "state", "state": "listening"})
                 elif event_type == "ping":
                     await emit({"type": "pong"})
         except WebSocketDisconnect:
@@ -315,12 +405,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             connected = False
             interrupt_active()
+            if pending_tasks:
+                await asyncio.gather(*pending_tasks, return_exceptions=True)
 
     return app
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="AICOM yerel sesli iletişim uygulaması")
+    parser = argparse.ArgumentParser(description="AICOM local bilingual voice application")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--reload", action="store_true")

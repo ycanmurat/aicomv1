@@ -18,7 +18,7 @@ class KnowledgeHit:
 
 
 class KnowledgeStore:
-    """Ağ gerektirmeyen küçük bilgi tabanı; SQLite FTS5 ile Türkçe arama yapar."""
+    """Small offline knowledge store backed by multilingual SQLite FTS5 search."""
 
     def __init__(self, path: Path) -> None:
         self.path = path.resolve()
@@ -70,9 +70,9 @@ class KnowledgeStore:
         clean_body = " ".join(body.split()).strip()
         clean_source = " ".join(source.split()).strip() or "local"
         if not clean_title or not clean_body:
-            raise ValueError("Bilgi başlığı ve içeriği boş olamaz.")
+            raise ValueError("Knowledge title and body cannot be empty.")
         if len(clean_body) > 100_000:
-            raise ValueError("Tek bilgi belgesi en fazla 100.000 karakter olabilir.")
+            raise ValueError("A knowledge document cannot exceed 100,000 characters.")
         with self._connect() as connection:
             cursor = connection.execute(
                 """

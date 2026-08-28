@@ -51,6 +51,7 @@ class Settings:
     nemo_model_dir: Path
     tts_provider: str
     tts_voice: str
+    tts_voice_en: str
     tts_rate: int
     freya_model: str
     freya_device: str
@@ -81,6 +82,7 @@ class Settings:
             nemo_model_dir=_path_env("AICOM_NEMO_MODEL_DIR", "models/nemo-cache"),
             tts_provider=os.getenv("AICOM_TTS_PROVIDER", "auto").lower(),
             tts_voice=os.getenv("AICOM_TTS_VOICE", "Yelda"),
+            tts_voice_en=os.getenv("AICOM_TTS_VOICE_EN", "Samantha"),
             tts_rate=_int_env("AICOM_TTS_RATE", 185),
             freya_model=os.getenv("AICOM_FREYA_MODEL", "freyavoice/freya-tts"),
             freya_device=os.getenv("AICOM_FREYA_DEVICE", "cpu").lower(),
@@ -97,18 +99,18 @@ class Settings:
 
     def validate(self) -> None:
         if self.stt_provider not in {"auto", "whisper", "nemotron"}:
-            raise ValueError("AICOM_STT_PROVIDER auto, whisper veya nemotron olmalıdır.")
+            raise ValueError("AICOM_STT_PROVIDER must be auto, whisper, or nemotron.")
         if self.tts_provider not in {"auto", "freya", "macos", "none"}:
-            raise ValueError("AICOM_TTS_PROVIDER auto, freya, macos veya none olmalıdır.")
+            raise ValueError("AICOM_TTS_PROVIDER must be auto, freya, macos, or none.")
         if not 1024 <= self.llm_context <= 131_072:
-            raise ValueError("LLM bağlamı 1024 ile 131072 arasında olmalıdır.")
+            raise ValueError("LLM context must be between 1024 and 131072.")
         if not 32 <= self.llm_max_tokens <= 4096:
-            raise ValueError("LLM çıktı sınırı 32 ile 4096 arasında olmalıdır.")
+            raise ValueError("LLM output limit must be between 32 and 4096.")
         if not 0 <= self.llm_temperature <= 2:
-            raise ValueError("LLM sıcaklığı 0 ile 2 arasında olmalıdır.")
+            raise ValueError("LLM temperature must be between 0 and 2.")
         if not 80 <= self.tts_rate <= 350:
-            raise ValueError("TTS konuşma hızı 80 ile 350 arasında olmalıdır.")
+            raise ValueError("TTS speech rate must be between 80 and 350.")
         if self.freya_device not in {"cpu", "mps", "cuda"}:
-            raise ValueError("AICOM_FREYA_DEVICE cpu, mps veya cuda olmalıdır.")
+            raise ValueError("AICOM_FREYA_DEVICE must be cpu, mps, or cuda.")
         if not 4 <= self.freya_steps <= 32:
-            raise ValueError("AICOM_FREYA_STEPS 4 ile 32 arasında olmalıdır.")
+            raise ValueError("AICOM_FREYA_STEPS must be between 4 and 32.")

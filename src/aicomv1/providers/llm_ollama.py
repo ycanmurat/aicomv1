@@ -74,7 +74,7 @@ class OllamaChatProvider:
                     if item.get("done"):
                         return
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            raise LLMError(f"Ollama yanıt akışı başarısız: {exc}") from exc
+            raise LLMError(f"Ollama response stream failed: {exc}") from exc
 
     async def complete(
         self, *, system_prompt: str, messages: list[dict[str, str]], max_tokens: int
@@ -92,7 +92,7 @@ class OllamaChatProvider:
                 response.raise_for_status()
                 item = response.json()
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            raise LLMError(f"Ollama tamamlayıcı yanıtı başarısız: {exc}") from exc
+            raise LLMError(f"Ollama completion failed: {exc}") from exc
         if error := item.get("error"):
             raise LLMError(str(error))
         return str(item.get("message", {}).get("content", "")).strip()
@@ -104,14 +104,14 @@ class OllamaChatProvider:
                 version_response.raise_for_status()
                 tags_response = await client.get(f"{self.settings.ollama_url}/api/tags")
                 tags_response.raise_for_status()
-            version = str(version_response.json().get("version", "bilinmiyor"))
+            version = str(version_response.json().get("version", "unknown"))
             names = {str(model.get("name", "")) for model in tags_response.json().get("models", [])}
             ready = self.settings.llm_model in names
             detail = (
-                f"Ollama {version}; {self.settings.llm_model} hazır."
+                f"Ollama {version}; {self.settings.llm_model} is ready."
                 if ready
-                else f"Ollama {version}; {self.settings.llm_model} henüz indirilmemiş."
+                else f"Ollama {version}; {self.settings.llm_model} has not been downloaded."
             )
             return ComponentStatus("llm", ready, detail)
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            return ComponentStatus("llm", False, f"Ollama erişilemiyor: {exc}")
+            return ComponentStatus("llm", False, f"Ollama is unavailable: {exc}")

@@ -1,106 +1,96 @@
-# AICOM v1
+# AICOM
 
-AICOM, çağrı senaryolarına bağlı olmayan; Türkçe konuşmayı anlayan, yerel bir dil
-modeliyle cevap üreten ve cevabı daha tamamlanmadan cümle cümle seslendiren bir masaüstü
-sesli iletişim uygulamasıdır. Çalışma anında bulut API'sine ihtiyaç duymaz. Model kurulumu
-bir kez internet gerektirir.
+**A local-first voice companion for Turkish and English.**
 
-Bu proje özellikle Apple Silicon ve 16 GB birleşik bellek için dengelenmiştir. Hedef,
-“dev bir modeli tek başına çalıştırmak” değil; iyi konuşma modeli, doğru ses hattı, yerel
-araçlar ve düşük gecikmeyi birlikte kullanarak güçlü bir bütün oluşturmaktır.
+AICOM listens through the browser, transcribes speech locally, and starts speaking while a
+local language model is still generating its answer. It is built for general conversation,
+not scripted call-center flows.
 
-## Şu anda çalışan özellikler
+> AICOM is an experimental project. It is useful as a local voice-assistant foundation,
+> but it does not match frontier cloud models or production voice systems yet.
 
-- Tarayıcı mikrofonundan kesintisiz 16 kHz PCM ses hattı
-- Gürültü tabanını öğrenen yerel VAD ve konuşma sonunu otomatik algılama
-- Konuşurken asistanı kesme (barge-in), devam eden model yanıtını ve ses kuyruğunu iptal etme
-- Doğruluk odaklı `whisper.cpp`; tek ayarla düşük gecikmeli `Nemotron 3.5 ASR 0.6B`
-- Ollama üzerinde `Qwen3.5 9B` akış yanıtı
-- Tam cevabı beklemeden cümle bazlı TTS
-- FreyaTTS-small hazırsa Türkçe Freya; değilse internetsiz macOS Yelda sesi
-- Oturum hafızası, uzun konuşmaları özetleme ve yerel SQLite FTS5 bilgi tabanı
-- Güvenli yerel saat ve hesap makinesi araçları
-- Sağlık ekranı, gecikme ölçümleri, yazılı giriş ve sesli çıkış kuyruğu
+## What it can do
 
-## Hızlı başlangıç
+- Turkish and English speech, responses, and interface
+- Streaming text and clause-by-clause speech, with voice interruption
+- Session memory, local knowledge search, a calculator, and local time
+- Offline conversations after the initial model setup
 
-Gerekli sistem araçları: macOS Apple Silicon, `uv`, `ffmpeg`, `ollama` ve `whisper-cli`.
-Ollama uygulaması/servisi açık olmalı.
+## Stack
+
+| Component | Technology |
+|---|---|
+| Speech recognition | whisper.cpp; optional Nemotron 3.5 ASR |
+| Language model | Qwen3.5 9B through Ollama |
+| Speech synthesis | FreyaTTS for Turkish; offline macOS voices for both languages |
+| Application | FastAPI, WebSocket, vanilla JavaScript, SQLite FTS5 |
+
+The project is currently optimized for Apple Silicon Macs with 16 GB or more of unified
+memory. Other systems may require provider or model changes.
+
+## Quick start
+
+Requires macOS on Apple Silicon, `uv`, `ffmpeg`, Ollama, and `whisper-cli`. Python 3.11 is
+managed automatically by `uv`. With Homebrew:
 
 ```bash
-cd /Users/murat/Desktop/Projects/aicomv1
-./scripts/bootstrap.sh
+brew install uv ffmpeg ollama whisper-cpp
+```
+
+Start the Ollama app, or run `ollama serve` in a separate terminal. Then:
+
+```bash
+git clone https://github.com/ycanmurat/aicomv1.git
+cd aicomv1
+./scripts/bootstrap.sh core
 ./scripts/run.sh
 ```
 
-Sonra [http://127.0.0.1:7870](http://127.0.0.1:7870) adresini açın ve mikrofon düğmesine
-bir kez dokunun. Temel kurulum Qwen ve Whisper yolunu hazırlar.
+Open [http://127.0.0.1:7870](http://127.0.0.1:7870), select a language, and enable the
+microphone.
 
-En iyi açık kaynak ses hattını da kurmak için:
+For the optional full voice stack, including NeMo-Speech.cpp, Nemotron, and FreyaTTS:
 
 ```bash
 ./scripts/bootstrap.sh full
 ```
 
-`full`, NVIDIA NeMo-Speech.cpp Metal çalışma zamanını ve Nemotron modelini proje içine;
-FreyaTTS kodunu ve model önbelleğini de yerel kurulum alanına indirir. Bu seçenek daha uzun
-sürer ve birkaç GB ek alan kullanır. Her iki mod da tekrar çalıştırılabilir.
+The full setup downloads several additional gigabytes. Core mode uses Whisper and offline
+macOS speech. Configure providers and voices in `.env`; see [.env.example](.env.example).
+List installed voices with `say -v '?'`. If needed, set `AICOM_TTS_VOICE` for Turkish and
+`AICOM_TTS_VOICE_EN` for English to voices available on your Mac.
 
-Kurulumu denetlemek için:
-
-```bash
-uv run aicom-doctor
-uv run aicom-benchmark --voice
-uv run aicom-smoke /tam/yol/16khz-mono.wav
-```
-
-## Mimari
-
-```text
-Mikrofon → AudioWorklet 16 kHz → tarayıcı VAD/endpoint
-         → kalıcı WebSocket → Whisper veya Nemotron
-         → yerel araçlar + oturum hafızası → Qwen3.5/Ollama akışı
-         → cümle ayırıcı → Freya veya macOS TTS → kesilebilir ses kuyruğu
-```
-
-Buradaki önemli ayrım, STT → LLM → TTS zincirinin üç uzun ve ardışık iş olarak
-çalışmamasıdır. Model token üretirken metin ekrana akar; ilk anlamlı cümle biter bitmez TTS
-başlar. Sonraki cümle üretilirken önceki cümle çalabilir.
-
-Ayrıntılı teknik kararlar [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) dosyasındadır.
-
-## Yerel bilgi ekleme
-
-Uygulama yalnız eklediğiniz yerel belgelerde arama yapar. Örnek:
+## Run and test
 
 ```bash
-curl -X POST http://127.0.0.1:7870/api/knowledge \
-  -H 'content-type: application/json' \
-  -d '{"title":"Proje notu","body":"AICOM tamamen yerel çalışır.","source":"kişisel"}'
+./scripts/run.sh
+uv run --offline --no-sync aicom-doctor
+uv run --offline --no-sync pytest
+uv run --offline --no-sync ruff check .
 ```
 
-## Gizlilik ve gerçekçi sınır
+## Current limitations
 
-Ses dosyaları `data/audio`, bilgi tabanı `data/knowledge`, STT/TTS modelleri `models`
-altında kalır; Qwen ağırlığı Ollama'nın cihazdaki yerel model deposundadır. Bu veriler Git'e
-alınmaz. Sunucu varsayılan olarak yalnız `127.0.0.1` üzerinde dinler. Kodda bulut model
-çağrısı yoktur; Ollama da loopback adresindedir.
+- A local 9B model cannot provide the reasoning depth or factual coverage of leading cloud
+  models. AICOM may still give incomplete or incorrect answers.
+- Speech detection is energy-based, and Whisper transcribes after a turn ends. Pauses,
+  noisy rooms, and clause-based playback can make conversation feel uneven.
+- Voice quality and latency depend on the provider and hardware.
+- Current information is unavailable unless it has been added to the local knowledge base.
 
-Qwen3.5 9B iyi bir yerel genel asistandır fakat GPT-5.6 Sol kapasitesini yüzde yüz yerelde,
-16 GB bir cihazda eşitlemek fiziksel olarak mümkün değildir. AICOM belirsiz veya güncel
-bilgi isteyen sorularda bunu söyleyecek şekilde yönlendirilmiştir. “Her konuda uzman ve hiç
-hata yapmaz” iddiası yerine ölçülebilen hız, sağlam ses akışı, yerel bilgi ve dürüst sınırlar
-hedeflenir.
+## Privacy
 
-## Geliştirme
+With the default configuration, speech and language inference run on your computer. Setup
+downloads dependencies and models; the launcher uses installed assets without syncing or
+downloading them at runtime. Keep `AICOM_OLLAMA_URL` pointed at your local Ollama instance
+and use a locally installed model.
 
-```bash
-uv sync --extra dev --python 3.11
-uv run ruff check .
-uv run pytest
-```
+Audio, knowledge, and model files are excluded from Git. The server listens on `127.0.0.1`
+by default and has no authentication: do not expose it to the internet.
 
-Freya geliştirme profilini korumak için `uv sync --extra dev --extra freya --python 3.11`
-kullanın. Temel profil bilinçli olarak yalnız macOS çevrimdışı ses geri dönüşünü kurar.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the technical design.
 
-Lisans: MIT. Model ve çalışma zamanı bileşenlerinin kendi lisansları geçerlidir.
+## License
+
+AICOM is released under the [MIT License](LICENSE). Downloaded models and third-party
+runtimes retain their own licenses.

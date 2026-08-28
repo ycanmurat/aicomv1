@@ -10,10 +10,10 @@ _MARKDOWN_PREFIX = re.compile(r"(?m)^\s{0,3}(?:#{1,6}|[-*+]\s|\d+[.)]\s)\s*")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])(?:[\"'”’)]*)\s+")
 
 
-def clean_spoken_text(text: str) -> str:
+def clean_spoken_text(text: str, *, language: str = "en") -> str:
     text = _CODE_FENCE.sub(" ", text)
     text = _MARKDOWN_LINK.sub(r"\1", text)
-    text = _BARE_URL.sub(" bağlantı ", text)
+    text = _BARE_URL.sub(" bağlantı " if language == "tr" else " link ", text)
     text = _INLINE_CODE.sub(r"\1", text)
     text = _MARKDOWN_PREFIX.sub("", text)
     text = text.replace("**", "").replace("__", "").replace("~~", "")
@@ -21,11 +21,14 @@ def clean_spoken_text(text: str) -> str:
 
 
 class ClauseSegmenter:
-    """Akış hâlindeki model metnini TTS'e uygun tamamlanmış parçalara ayırır."""
+    """Split streaming model text into complete, speech-friendly clauses."""
 
-    def __init__(self, *, soft_limit: int = 150, hard_limit: int = 240) -> None:
+    def __init__(
+        self, *, soft_limit: int = 150, hard_limit: int = 240, language: str = "en"
+    ) -> None:
         self.soft_limit = soft_limit
         self.hard_limit = hard_limit
+        self.language = language
         self.buffer = ""
 
     def push(self, delta: str) -> list[str]:
@@ -40,7 +43,9 @@ class ClauseSegmenter:
         while self.buffer.strip():
             match = _SENTENCE_BOUNDARY.search(self.buffer)
             if match and match.start() <= self.hard_limit:
-                candidate = clean_spoken_text(self.buffer[: match.start()])
+                candidate = clean_spoken_text(
+                    self.buffer[: match.start()], language=self.language
+                )
                 self.buffer = self.buffer[match.end() :]
                 if candidate:
                     ready.append(candidate)
@@ -48,14 +53,14 @@ class ClauseSegmenter:
 
             cut = self._soft_cut()
             if cut is not None:
-                candidate = clean_spoken_text(self.buffer[:cut])
+                candidate = clean_spoken_text(self.buffer[:cut], language=self.language)
                 self.buffer = self.buffer[cut:]
                 if candidate:
                     ready.append(candidate)
                 continue
 
             if final:
-                candidate = clean_spoken_text(self.buffer)
+                candidate = clean_spoken_text(self.buffer, language=self.language)
                 self.buffer = ""
                 if candidate:
                     ready.append(candidate)

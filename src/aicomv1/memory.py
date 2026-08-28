@@ -5,6 +5,7 @@ from pathlib import Path
 from threading import RLock
 
 from aicomv1.models import ConversationSession, Message
+from aicomv1.prompt import normalize_language
 
 
 class SessionNotFoundError(KeyError):
@@ -12,7 +13,7 @@ class SessionNotFoundError(KeyError):
 
 
 class SessionStore:
-    """Tek cihazdaki görüşmeleri ve her görüşmenin özel ses dizinini yönetir."""
+    """Manage in-memory conversations and their private audio directories."""
 
     def __init__(self, audio_root: Path) -> None:
         self.audio_root = audio_root.resolve()
@@ -20,12 +21,12 @@ class SessionStore:
         self._sessions: dict[str, ConversationSession] = {}
         self._lock = RLock()
 
-    def create(self) -> ConversationSession:
+    def create(self, *, language: str = "en") -> ConversationSession:
         with self._lock:
-            session = ConversationSession()
+            session = ConversationSession(language=normalize_language(language))
             session_directory = (self.audio_root / session.id).resolve()
             if session_directory.parent != self.audio_root:
-                raise ValueError("Güvenli olmayan oturum dizini reddedildi.")
+                raise ValueError("Unsafe session directory was rejected.")
             session_directory.mkdir(mode=0o700)
             session.audio_directory = session_directory
             self._sessions[session.id] = session
@@ -43,21 +44,28 @@ class SessionStore:
             session = self._sessions.pop(session_id, None)
         if session is None or session.audio_directory is None:
             return
+        if session.active_cancel is not None:
+            session.active_cancel.set()
         target = session.audio_directory.resolve()
         if target.parent != self.audio_root or target.name != session.id:
-            raise ValueError("Güvenli olmayan oturum silme isteği reddedildi.")
+            raise ValueError("Unsafe session deletion request was rejected.")
         shutil.rmtree(target, ignore_errors=True)
 
 
 def prompt_messages(
-    session: ConversationSession, *, recent_limit: int = 14
+    session: ConversationSession, *, recent_limit: int = 14, language: str | None = None
 ) -> list[dict[str, str]]:
+    language = normalize_language(session.language if language is None else language)
     messages: list[dict[str, str]] = []
     if session.summary:
         messages.append(
             {
                 "role": "system",
-                "content": f"Önceki konuşmadan yerel hafıza notu:\n{session.summary}",
+                "content": (
+                    f"Local memory note from earlier conversation:\n{session.summary}"
+                    if language == "en"
+                    else f"Önceki konuşmadan yerel hafıza notu:\n{session.summary}"
+                ),
             }
         )
     messages.extend(message.as_ollama() for message in session.messages[-recent_limit:])

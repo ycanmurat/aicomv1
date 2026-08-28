@@ -1,1 +1,1 @@
-"""Yerel model sağlayıcıları."""
+"""Local model providers."""

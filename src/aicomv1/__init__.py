@@ -1,3 +1,3 @@
-"""AICOM: tamamen yerel Turkce sesli iletisim asistani."""
+"""AICOM: a local-first bilingual voice intelligence application."""
 
 __version__ = "0.1.0"

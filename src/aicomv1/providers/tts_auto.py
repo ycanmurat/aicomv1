@@ -4,43 +4,53 @@ from pathlib import Path
 
 from aicomv1.config import Settings
 from aicomv1.models import ComponentStatus, SpeechAudio
+from aicomv1.prompt import normalize_language
 from aicomv1.providers.base import Synthesizer, TTSError
 from aicomv1.providers.tts_freya import FreyaSynthesizer
 from aicomv1.providers.tts_macos import MacOSSynthesizer
 
 
 class SilentSynthesizer:
-    def status(self) -> ComponentStatus:
-        return ComponentStatus("tts-none", True, "Ses üretimi kapalı.")
+    def status(self, language: str = "tr") -> ComponentStatus:
+        normalize_language(language)
+        return ComponentStatus("tts-none", True, "Speech synthesis is disabled.")
 
-    def synthesize(self, text: str, output_path: Path) -> SpeechAudio:
-        raise TTSError("Ses üretimi kapalı.")
+    def synthesize(self, text: str, output_path: Path, language: str = "tr") -> SpeechAudio:
+        normalize_language(language)
+        raise TTSError("Speech synthesis is disabled.")
 
 
 class AutoSynthesizer:
     def __init__(self, settings: Settings) -> None:
-        self.fallback: Synthesizer | None = None
-        freya = FreyaSynthesizer(settings)
-        macos = MacOSSynthesizer(settings)
-        if settings.tts_provider == "none":
-            self.active: Synthesizer = SilentSynthesizer()
-        elif settings.tts_provider == "freya":
-            self.active = freya
-        elif settings.tts_provider == "macos":
-            self.active = macos
-        elif freya.status().ready:
-            self.active = freya
-            self.fallback = macos if macos.status().ready else None
-        else:
-            self.active = macos
+        self.settings = settings
+        self.freya = FreyaSynthesizer(settings)
+        self.macos = MacOSSynthesizer(settings)
+        self.silent = SilentSynthesizer()
+        self._freya_failed = False
 
-    def status(self) -> ComponentStatus:
-        return self.active.status()
+    def _provider_for(self, language: str) -> Synthesizer:
+        if self.settings.tts_provider == "none":
+            return self.silent
+        if language == "en" or self.settings.tts_provider == "macos":
+            return self.macos
+        if not self._freya_failed and self.freya.status(language=language).ready:
+            return self.freya
+        return self.macos
 
-    def synthesize(self, text: str, output_path: Path) -> SpeechAudio:
+    def status(self, language: str = "tr") -> ComponentStatus:
+        language = normalize_language(language)
+        return self._provider_for(language).status(language=language)
+
+    def synthesize(self, text: str, output_path: Path, language: str = "tr") -> SpeechAudio:
+        language = normalize_language(language)
+        provider = self._provider_for(language)
         try:
-            return self.active.synthesize(text, output_path)
+            return provider.synthesize(text, output_path, language=language)
         except TTSError:
-            if self.fallback is None:
+            if provider is not self.freya:
                 raise
-            return self.fallback.synthesize(text, output_path)
+            # Avoid repeatedly retrying a broken model for each sentence in a turn.
+            self._freya_failed = True
+            if not self.macos.status(language=language).ready:
+                raise
+            return self.macos.synthesize(text, output_path, language=language)

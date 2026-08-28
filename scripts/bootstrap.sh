@@ -6,13 +6,14 @@ mode=${1:-core}
 
 case "$mode" in
     core|full) ;;
-    *) echo "Kullanım: $0 [core|full]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [core|full]" >&2; exit 2 ;;
 esac
 
 cd "$project_dir"
-command -v uv >/dev/null 2>&1 || { echo "uv bulunamadı." >&2; exit 1; }
-command -v ffmpeg >/dev/null 2>&1 || { echo "ffmpeg bulunamadı." >&2; exit 1; }
-command -v ollama >/dev/null 2>&1 || { echo "Ollama bulunamadı." >&2; exit 1; }
+command -v uv >/dev/null 2>&1 || { echo "uv was not found." >&2; exit 1; }
+command -v ffmpeg >/dev/null 2>&1 || { echo "ffmpeg was not found." >&2; exit 1; }
+command -v ollama >/dev/null 2>&1 || { echo "Ollama was not found." >&2; exit 1; }
+command -v whisper-cli >/dev/null 2>&1 || { echo "whisper-cli was not found." >&2; exit 1; }
 
 uv python install 3.11
 uv sync --extra dev --python 3.11
@@ -22,14 +23,14 @@ if [ ! -f .env ]; then
 fi
 
 if ! curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
-    echo "Ollama servisini açın ve bu betiği yeniden çalıştırın." >&2
+    echo "Start the Ollama service, then run this script again." >&2
     exit 1
 fi
 ollama pull qwen3.5:9b
 
 whisper_model="$project_dir/models/ggml-large-v3-turbo-q8_0.bin"
 if [ ! -f "$whisper_model" ]; then
-    echo "Whisper large-v3-turbo q8 modeli indiriliyor…"
+    echo "Downloading Whisper large-v3-turbo q8 weights..."
     curl -fL --retry 3 \
         -o "$whisper_model.part" \
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin"
@@ -56,9 +57,11 @@ if [ "$mode" = full ]; then
         git -C "$project_dir/.runtime/FreyaTTS" pull --ff-only
     fi
     uv sync --extra dev --extra freya --python 3.11
-    HF_HOME="$project_dir/models/huggingface" uv run python -c \
-        "import sys; sys.path.insert(0, '$project_dir/.runtime/FreyaTTS'); from freyatts import FreyaTTS; FreyaTTS.from_pretrained('freyavoice/freya-tts', device='cpu'); print('FreyaTTS hazır.')"
+    HF_HOME="$project_dir/models/huggingface" HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
+        uv run --no-sync python -c \
+        "import sys; sys.path.insert(0, sys.argv[1]); from freyatts import FreyaTTS; FreyaTTS.from_pretrained('freyavoice/freya-tts', device='cpu'); print('FreyaTTS is ready.')" \
+        "$project_dir/.runtime/FreyaTTS"
 fi
 
-uv run aicom-doctor || true
-echo "Başlatmak için: ./scripts/run.sh"
+uv run --offline --no-sync aicom-doctor || true
+echo "Start AICOM: ./scripts/run.sh"

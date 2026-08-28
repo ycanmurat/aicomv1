@@ -1,7 +1,7 @@
 [project]
 name = "aicomv1"
 version = "0.1.0"
-description = "Tamamen yerel, Turkce, gercek zamanli yapay zeka sesli iletisim asistani"
+description = "A local-first voice assistant with English and Turkish conversation support"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [

@@ -1,53 +1,110 @@
-# Mimari ve araştırma kararları
+# Architecture
 
-## Donanıma uygun ana yol
+AICOM is a local-first, bilingual voice-assistant pipeline designed primarily for Apple
+Silicon Macs. The architecture favors a responsive conversation loop and replaceable local
+providers over a single large model.
 
-Hedef makine Apple M4 ve 16 GB birleşik bellektir. Bu sınıfta kaliteyi yalnız parametre
-sayısıyla büyütmek, konuşma gecikmesini ve bellek baskısını hızla bozar. Seçilen denge:
+## Runtime flow
 
-| Katman | Birincil | Güvenli geri dönüş | Seçim nedeni |
-|---|---|---|---|
-| STT | Whisper large-v3-turbo q8 | Nemotron 3.5 ASR 0.6B / Metal | Canlı Türkçe denemede Whisper daha doğru; Nemotron yaklaşık 0,8 sn daha hızlı |
-| LLM | Qwen3.5 9B Q4 / Ollama | Qwen3.5 4B | 16 GB'da genel yetenek ile hız dengesi |
-| TTS | FreyaTTS-small 183M | macOS Yelda | Türkçe-first açık model; sistem sesi her zaman çevrimdışı hazır |
-| Hafıza | SQLite FTS5 + özet | yalnız yakın geçmiş | Küçük, denetlenebilir, ağsız |
+```text
+Browser microphone
+  -> AudioWorklet (16 kHz mono PCM)
+  -> browser VAD and turn endpointing
+  -> persistent WebSocket
+  -> Whisper or Nemotron speech recognition
+  -> session memory, local tools, and SQLite knowledge search
+  -> Qwen through the local Ollama API
+  -> streaming clause segmenter
+  -> FreyaTTS or an offline macOS voice
+  -> interruptible browser audio queue
+```
 
-Kaynak projeler: [NeMo-Speech.cpp](https://github.com/NVIDIA/NeMo-Speech.cpp),
-[Nemotron 3.5 ASR](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b),
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp),
-[FreyaTTS](https://github.com/freyavoiceai/FreyaTTS),
-[Qwen3.5/Ollama](https://ollama.com/library/qwen3.5).
+The server does not wait for the complete model response before starting speech synthesis.
+Text deltas are sent to the interface immediately; each completed clause enters the TTS
+queue while the model continues generating the next one.
 
-## Neden önceki tipik prototipler kötü hissediyor?
+## Components
 
-Bir sesli asistanı kötü hissettiren şey çoğu zaman yalnız model kalitesi değildir:
+| Area | Implementation | Notes |
+|---|---|---|
+| Web client | HTML, CSS, JavaScript, AudioWorklet | Captures audio, detects speech, plays queued WAV segments, and supports barge-in |
+| Transport | FastAPI WebSocket | Carries binary PCM input and JSON response events over one persistent connection |
+| STT | whisper.cpp by default | Accuracy-oriented, turn-based transcription with Turkish and English language hints |
+| Experimental STT | Nemotron 3.5 through NeMo-Speech.cpp | Lower-latency local path; enabled explicitly after the full setup |
+| LLM | Qwen3.5 9B through Ollama | Streams tokens from the configured Ollama endpoint; loopback by default |
+| TTS | FreyaTTS and macOS speech | Freya is used when available; English falls back to an offline English macOS voice |
+| Memory | In-process sessions + summaries | Keeps recent messages and compacts older context |
+| Knowledge | SQLite FTS5 | Searches only documents explicitly added to the local database |
+| Tools | Allowlisted local functions | Currently includes deterministic calculation and local time |
 
-1. Her turda bağlantı ve model yeniden kurulursa ilk yanıt gecikir.
-2. Konuşma sonu kaba bir sessizlik süresiyle ölçülürse asistan ya söz keser ya bekletir.
-3. LLM cevabının tamamı beklenip TTS'e tek parça verilirse etkileşim konuşma gibi olmaz.
-4. Sabit cümle önbelleği genel sohbette işe yaramaz.
-5. Ses çalarken mikrofon kapatılırsa kullanıcı asistanı kesemez.
+## Language handling
 
-AICOM kalıcı WebSocket, tarayıcıda 20 ms ses kareleri, ön tampon, cümle tabanlı TTS kuyruğu
-ve tur iptali kullanır. İlk sürümde endpoint kararı enerji tabanlı VAD'dir. Nemotron hazır
-olduğunda ASR akış yolu seçilir; ileride Silero VAD/Smart Turn eklemek adaptör sınırlarını
-değiştirmez.
+Each session carries an explicit `tr` or `en` language setting. It controls the system
+prompt, speech-recognition hint, summary language, speech voice, and interface copy. The
+language is selected by the user instead of being inferred independently by every provider,
+which keeps a turn consistent from transcription through playback.
 
-## Güven ve uzmanlık
+FreyaTTS is currently the Turkish-oriented voice path. English speech uses the configured
+offline macOS voice when Freya is active.
 
-Yerel LLM genel bilgiyi taşır; doğruluk gerektiren kişisel/kurumsal olgular SQLite bilgi
-tabanından getirilir. Hesap ve saat gibi deterministik işler modelin tahminine bırakılmaz.
-Güncel internet bilgisi varsayılan mimarinin dışında tutulmuştur. Bu nedenle asistan,
-kanıtı olmayan güncel bir iddiayı uydurmak yerine sınırını belirtir.
+`POST /api/sessions` accepts an optional `{"language":"en"}` or `{"language":"tr"}` body.
+The WebSocket announces that language on connection. A `language.set` event updates the
+session, cancels the active turn, and discards any partial recording. Text and `audio.start`
+events can also carry a language; each turn captures it so later changes cannot alter its
+transcript, prompt, or voice. Reconnecting to the same session preserves its language.
 
-Bir sonraki araç katmanı için güvenli sınır: yalnız açıkça izin verilmiş yerel işlevler,
-şemalı girdiler, zaman aşımı ve kullanıcıya görünür sonuç. Serbest kabuk erişimi sesli
-asistanın varsayılan yetkisi değildir.
+## Turn lifecycle and interruption
 
-## Kaynak ve veri sınırları
+The browser keeps a small pre-roll buffer so the beginning of a detected utterance is not
+lost. After silence reaches the endpoint threshold, it commits the buffered PCM as one turn.
+The server then writes a turn WAV file, transcribes it, and starts an assistant task.
 
-- Web istemcisi yalnız aynı origin REST/WebSocket uçlarına bağlanır.
-- Model dosyaları ve Hugging Face önbelleği proje `models/` dizinindedir.
-- Oturum sesleri rastgele kimlikli, izinleri daraltılmış dizinlerde tutulur.
-- Ses sunucusu yol geçişini gerçek yol ve üst dizin denetimiyle reddeder.
-- Git yalnız kodu taşır; model, ses, `.env` ve kişisel bilgi tabanı dışarıda kalır.
+Every active turn has a cancellation signal. Speaking while AICOM is playing audio clears
+the browser queue, stops the current clip, and cancels further model and TTS output. Some
+native provider work may finish in the background because not every local runtime supports
+hard cancellation.
+
+## Local data boundary
+
+- The HTTP server and Ollama endpoint use loopback addresses by default.
+- Session audio is stored under `data/audio/`.
+- The knowledge database is stored under `data/knowledge/`.
+- STT and TTS assets are stored under `models/` and `.runtime/`; LLM weights stay in
+  Ollama's local model store.
+- Model assets, audio, `.env`, and the personal knowledge database are excluded from Git.
+- Audio downloads are restricted to the active session directory to prevent path traversal.
+
+Model installation requires network access. Normal conversation does not require a cloud AI
+service once all selected models are present locally.
+
+## Development checks
+
+The bootstrap script installs test dependencies. After setup, use the installed environment
+without downloading or synchronizing packages:
+
+```bash
+uv run --offline --no-sync pytest
+uv run --offline --no-sync ruff check .
+uv run --offline --no-sync aicom-doctor
+uv run --offline --no-sync aicom-benchmark --language en --voice
+uv run --offline --no-sync aicom-smoke sample.wav --language tr
+```
+
+The smoke test expects a mono, PCM16 WAV at 16 kHz and a running AICOM server. Run it once
+with an English sample and once with a Turkish sample. It checks transcription, response
+text, and generated WAV output; it is not a microphone or perceptual voice-quality test.
+
+When changing dependencies, use `uv sync --extra dev --extra freya --python 3.11` to retain
+the optional Freya environment, or omit `--extra freya` for core-only development.
+
+## Known design limits
+
+The current endpoint detector is energy-based rather than semantic. Whisper returns one
+transcript after the user finishes speaking, and clause-level WAV files can introduce small
+rhythm breaks. Local model quality is constrained by available memory and compute. These
+trade-offs make the project a practical experimental base, not a production-grade realtime
+assistant.
+
+The provider boundaries are intentionally small so streaming ASR, semantic turn detection,
+continuous PCM synthesis, or a different local model can be added without replacing the
+whole application.

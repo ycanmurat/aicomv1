@@ -12,7 +12,7 @@ from aicomv1.memory import (
     prompt_messages,
 )
 from aicomv1.models import ConversationSession, Role
-from aicomv1.prompt import SUMMARY_PROMPT, SYSTEM_PROMPT
+from aicomv1.prompt import normalize_language, summary_prompt, system_prompt
 from aicomv1.providers.base import ChatProvider, Synthesizer, TTSError
 from aicomv1.text import ClauseSegmenter, clean_spoken_text
 from aicomv1.tools import LocalToolRouter
@@ -34,26 +34,29 @@ class AssistantEngine:
         turn_id: str,
         cancel: Event,
         emit: EventSink,
+        language: str | None = None,
     ) -> None:
+        language = normalize_language(session.language if language is None else language)
         clean_user = " ".join(user_text.split()).strip()
         if not clean_user or cancel.is_set():
             return
         session.add(Role.USER, clean_user)
-        tool_context = self.tools.context_for(clean_user)
-        system_prompt = SYSTEM_PROMPT
+        tool_context = self.tools.context_for(clean_user, language=language)
+        active_system_prompt = system_prompt(language)
         if not tool_context.empty:
-            system_prompt += "\n\n" + tool_context.render()
+            active_system_prompt += "\n\n" + tool_context.render(language=language)
 
         started = time.perf_counter()
         first_token_ms: int | None = None
         first_audio_ms: int | None = None
         full_text: list[str] = []
-        segmenter = ClauseSegmenter()
+        segmenter = ClauseSegmenter(language=language)
         speech_queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue()
 
         async def speech_worker() -> None:
             nonlocal first_audio_ms
-            if self.tts.status().name == "tts-none":
+            status = await asyncio.to_thread(self.tts.status, language=language)
+            if status.name == "tts-none":
                 return
             while True:
                 item = await speech_queue.get()
@@ -69,13 +72,16 @@ class AssistantEngine:
                 if output_path.parent != session.audio_directory.resolve():
                     continue
                 try:
-                    audio = await asyncio.to_thread(self.tts.synthesize, segment, output_path)
+                    audio = await asyncio.to_thread(
+                        self.tts.synthesize, segment, output_path, language
+                    )
                 except TTSError as exc:
                     await emit(
                         {
                             "type": "warning",
                             "turn_id": turn_id,
-                            "message": f"Ses üretilemedi: {exc}",
+                            "code": "speech_synthesis_failed",
+                            "message": f"Speech synthesis failed: {exc}",
                         }
                     )
                     continue
@@ -101,8 +107,8 @@ class AssistantEngine:
         try:
             await emit({"type": "state", "state": "thinking", "turn_id": turn_id})
             async for delta in self.llm.stream(
-                system_prompt=system_prompt,
-                messages=prompt_messages(session),
+                system_prompt=active_system_prompt,
+                messages=prompt_messages(session, language=language),
                 cancel=cancel,
             ):
                 if cancel.is_set():
@@ -126,7 +132,7 @@ class AssistantEngine:
                 await speech_queue.put(None)
                 await worker
 
-        answer = clean_spoken_text("".join(full_text))
+        answer = clean_spoken_text("".join(full_text), language=language)
         if cancel.is_set():
             await emit({"type": "interrupted", "turn_id": turn_id})
             return
@@ -143,16 +149,18 @@ class AssistantEngine:
             }
         )
         await emit({"type": "state", "state": "listening", "turn_id": turn_id})
-        await self._compact_history(session)
+        await self._compact_history(session, language=language)
 
-    async def _compact_history(self, session: ConversationSession) -> None:
+    async def _compact_history(self, session: ConversationSession, *, language: str = "tr") -> None:
         old = old_messages_for_summary(session)
         if not old:
             return
         transcript = "\n".join(f"{message.role.value}: {message.content}" for message in old)
+        if session.summary:
+            transcript = f"Previous memory note:\n{session.summary}\n\nConversation:\n{transcript}"
         try:
             summary = await self.llm.complete(
-                system_prompt=SUMMARY_PROMPT,
+                system_prompt=summary_prompt(language),
                 messages=[{"role": "user", "content": transcript}],
                 max_tokens=240,
             )
