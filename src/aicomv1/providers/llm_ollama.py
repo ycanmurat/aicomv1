@@ -30,7 +30,7 @@ class OllamaChatProvider:
             "messages": [{"role": "system", "content": system_prompt}, *messages],
             "stream": stream,
             "think": reasoning,
-            "keep_alive": "15m",
+            "keep_alive": f"{self.settings.llm_keep_alive_seconds}s",
             "options": {
                 "num_ctx": self.settings.llm_context,
                 "num_predict": max_tokens or self.settings.llm_max_tokens,

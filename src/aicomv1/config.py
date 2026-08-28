@@ -40,6 +40,7 @@ class Settings:
     ollama_url: str
     llm_model: str
     llm_context: int
+    llm_keep_alive_seconds: int
     llm_max_tokens: int
     llm_temperature: float
     stt_provider: str
@@ -56,6 +57,7 @@ class Settings:
     freya_model: str
     freya_device: str
     freya_steps: int
+    freya_idle_seconds: float
     freya_root: Path
     hf_home: Path
     knowledge_db: Path
@@ -70,7 +72,8 @@ class Settings:
             port=_int_env("AICOM_PORT", 7870),
             ollama_url=os.getenv("AICOM_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/"),
             llm_model=os.getenv("AICOM_LLM_MODEL", "qwen3.5:9b"),
-            llm_context=_int_env("AICOM_LLM_CONTEXT", 8192),
+            llm_context=_int_env("AICOM_LLM_CONTEXT", 6144),
+            llm_keep_alive_seconds=_int_env("AICOM_LLM_KEEP_ALIVE_SECONDS", 180),
             llm_max_tokens=_int_env("AICOM_LLM_MAX_TOKENS", 480),
             llm_temperature=_float_env("AICOM_LLM_TEMPERATURE", 0.35),
             stt_provider=os.getenv("AICOM_STT_PROVIDER", "auto").lower(),
@@ -87,12 +90,13 @@ class Settings:
             freya_model=os.getenv("AICOM_FREYA_MODEL", "freyavoice/freya-tts"),
             freya_device=os.getenv("AICOM_FREYA_DEVICE", "cpu").lower(),
             freya_steps=_int_env("AICOM_FREYA_STEPS", 16),
+            freya_idle_seconds=_float_env("AICOM_FREYA_IDLE_SECONDS", 120),
             freya_root=_path_env("AICOM_FREYA_ROOT", ".runtime/FreyaTTS"),
             hf_home=_path_env("AICOM_HF_HOME", "models/huggingface"),
             knowledge_db=_path_env("AICOM_KNOWLEDGE_DB", "data/knowledge/knowledge.sqlite3"),
             audio_root=_path_env("AICOM_AUDIO_ROOT", "data/audio"),
             log_level=os.getenv("AICOM_LOG_LEVEL", "INFO").upper(),
-            warmup=_bool_env("AICOM_WARMUP", True),
+            warmup=_bool_env("AICOM_WARMUP", False),
         )
         settings.validate()
         return settings
@@ -104,6 +108,8 @@ class Settings:
             raise ValueError("AICOM_TTS_PROVIDER must be auto, freya, macos, or none.")
         if not 1024 <= self.llm_context <= 131_072:
             raise ValueError("LLM context must be between 1024 and 131072.")
+        if not 0 <= self.llm_keep_alive_seconds <= 3600:
+            raise ValueError("LLM keep-alive must be between 0 and 3600 seconds.")
         if not 32 <= self.llm_max_tokens <= 4096:
             raise ValueError("LLM output limit must be between 32 and 4096.")
         if not 0 <= self.llm_temperature <= 2:
@@ -114,3 +120,5 @@ class Settings:
             raise ValueError("AICOM_FREYA_DEVICE must be cpu, mps, or cuda.")
         if not 4 <= self.freya_steps <= 32:
             raise ValueError("AICOM_FREYA_STEPS must be between 4 and 32.")
+        if not 0 <= self.freya_idle_seconds <= 3600:
+            raise ValueError("Freya idle timeout must be between 0 and 3600 seconds.")

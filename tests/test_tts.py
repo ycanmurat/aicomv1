@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from subprocess import CompletedProcess
-from threading import Lock
+from threading import Event, Lock
 from types import SimpleNamespace
 
 import pytest
@@ -158,6 +158,86 @@ def test_freya_serializes_model_inference(settings, monkeypatch, tmp_path) -> No
         for future in futures:
             future.result(timeout=2)
     assert highest_active == 1
+
+
+def test_freya_releases_loaded_model_after_idle_timeout(settings, monkeypatch, tmp_path) -> None:
+    provider = FreyaSynthesizer(replace(settings, freya_idle_seconds=0.02))
+    model = SimpleNamespace(
+        synthesize=lambda *args, **kwargs: b"audio", save_wav=lambda *args: None
+    )
+    released = []
+    provider._model = model
+    monkeypatch.setattr(provider, "_release_runtime_memory", lambda: released.append(True))
+
+    provider.synthesize("Merhaba", tmp_path / "idle.wav", "tr")
+    deadline = time.monotonic() + 1
+    while provider._model is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert provider._model is None
+    assert released == [True]
+
+
+def test_zero_freya_idle_timeout_keeps_model_loaded(settings, monkeypatch, tmp_path) -> None:
+    provider = FreyaSynthesizer(replace(settings, freya_idle_seconds=0))
+    model = SimpleNamespace(
+        synthesize=lambda *args, **kwargs: b"audio", save_wav=lambda *args: None
+    )
+    released = []
+    provider._model = model
+    monkeypatch.setattr(provider, "_release_runtime_memory", lambda: released.append(True))
+
+    provider.synthesize("Merhaba", tmp_path / "resident.wav", "tr")
+
+    assert provider._model is model
+    assert released == []
+    assert provider.unload()
+    assert released == [True]
+
+
+def test_stale_freya_timer_cannot_unload_reused_model(settings, monkeypatch) -> None:
+    provider = FreyaSynthesizer(replace(settings, freya_idle_seconds=60))
+    model = object()
+    released = []
+    provider._model = model
+    monkeypatch.setattr(provider, "_release_runtime_memory", lambda: released.append(True))
+
+    provider._schedule_idle_unload()
+    stale_generation = provider._idle_generation
+    provider._schedule_idle_unload()
+    provider._unload_if_idle(stale_generation)
+
+    assert provider._model is model
+    assert released == []
+    assert provider.unload()
+    assert released == [True]
+
+
+def test_freya_unload_waits_for_active_inference(settings, monkeypatch, tmp_path) -> None:
+    provider = FreyaSynthesizer(replace(settings, freya_idle_seconds=0))
+    inference_started = Event()
+    inference_can_finish = Event()
+    released = []
+
+    def synthesize(*args, **kwargs):
+        inference_started.set()
+        assert inference_can_finish.wait(timeout=1)
+        return b"audio"
+
+    provider._model = SimpleNamespace(synthesize=synthesize, save_wav=lambda *args: None)
+    monkeypatch.setattr(provider, "_release_runtime_memory", lambda: released.append(True))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        synthesis = pool.submit(provider.synthesize, "Merhaba", tmp_path / "active.wav", "tr")
+        assert inference_started.wait(timeout=1)
+        unloading = pool.submit(provider.unload)
+        time.sleep(0.02)
+        assert not unloading.done()
+        inference_can_finish.set()
+        synthesis.result(timeout=1)
+        assert unloading.result(timeout=1)
+
+    assert released == [True]
 
 
 @pytest.fixture

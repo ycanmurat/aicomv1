@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import gc
 import importlib.util
 import os
 import sys
 import time
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Timer
 from typing import Any
 
 from aicomv1.config import Settings
@@ -23,6 +24,8 @@ class FreyaSynthesizer:
         self._model: Any | None = None
         self._lock = Lock()
         self._inference_lock = Lock()
+        self._idle_timer: Timer | None = None
+        self._idle_generation = 0
 
     def _cached_files(self, repo: str, filenames: tuple[str, ...]) -> bool:
         cache_root = self.settings.hf_home / "hub" / f"models--{repo.replace('/', '--')}"
@@ -85,6 +88,63 @@ class FreyaSynthesizer:
                     raise TTSError(f"FreyaTTS could not be loaded: {exc}") from exc
             return self._model
 
+    @staticmethod
+    def _release_runtime_memory() -> None:
+        gc.collect()
+        torch = sys.modules.get("torch")
+        try:
+            if torch is not None and torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            if torch is not None and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except (AttributeError, RuntimeError):
+            pass
+
+    def _schedule_idle_unload(self) -> None:
+        timeout = self.settings.freya_idle_seconds
+        with self._lock:
+            self._idle_generation += 1
+            generation = self._idle_generation
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+            if timeout <= 0:
+                return
+            timer = Timer(timeout, self._unload_if_idle, args=(generation,))
+            timer.daemon = True
+            self._idle_timer = timer
+            timer.start()
+
+    def _unload_if_idle(self, generation: int) -> None:
+        model: Any | None = None
+        with self._inference_lock:
+            with self._lock:
+                if generation != self._idle_generation:
+                    return
+                model = self._model
+                self._model = None
+                self._idle_timer = None
+            if model is not None:
+                del model
+                self._release_runtime_memory()
+
+    def unload(self) -> bool:
+        """Release the loaded model without removing its local files."""
+        model: Any | None = None
+        with self._inference_lock:
+            with self._lock:
+                self._idle_generation += 1
+                if self._idle_timer is not None:
+                    self._idle_timer.cancel()
+                    self._idle_timer = None
+                model = self._model
+                self._model = None
+            released = model is not None
+            if model is not None:
+                del model
+                self._release_runtime_memory()
+        return released
+
     def synthesize(self, text: str, output_path: Path, language: str = "tr") -> SpeechAudio:
         if normalize_language(language) != "tr":
             raise TTSError("FreyaTTS supports Turkish only; use a local English voice instead.")
@@ -92,14 +152,16 @@ class FreyaSynthesizer:
         if not clean:
             raise TTSError("Empty text cannot be synthesized.")
         started = time.perf_counter()
-        model = self._load()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             # A cancelled worker may still be running; never share the model concurrently.
             with self._inference_lock:
+                model = self._load()
                 wav = model.synthesize(clean, steps=self.settings.freya_steps)
                 model.save_wav(wav, str(output_path))
+                self._schedule_idle_unload()
         except Exception as exc:
+            self._schedule_idle_unload()
             raise TTSError(f"FreyaTTS synthesis failed: {exc}") from exc
         return SpeechAudio(
             path=output_path,

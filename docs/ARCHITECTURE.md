@@ -77,6 +77,20 @@ hard cancellation.
 Model installation requires network access. Normal conversation does not require a cloud AI
 service once all selected models are present locally.
 
+## Resource lifecycle
+
+The 9B model stays at the configured 6144-token context but is released by Ollama after three
+idle minutes. FreyaTTS is loaded lazily for Turkish speech and released after two idle minutes.
+Startup warmup is disabled by default, so opening the server does not immediately reserve
+model memory. These values are configurable through `AICOM_LLM_CONTEXT`,
+`AICOM_LLM_KEEP_ALIVE_SECONDS`, `AICOM_FREYA_IDLE_SECONDS`, and `AICOM_WARMUP`.
+
+Short idle timeouts reduce memory pressure but add model-loading latency to the next turn.
+They do not change model weights or speech generation quality.
+An LLM keep-alive value of `0` unloads Qwen after each request; a Freya idle timeout of `0`
+disables automatic Freya unloading. Freya cleanup is best-effort because Torch and the
+operating-system allocator may retain reusable pages after model references are released.
+
 ## Development checks
 
 The bootstrap script installs test dependencies. After setup, use the installed environment

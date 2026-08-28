@@ -60,6 +60,12 @@ macOS speech. Configure providers and voices in `.env`; see [.env.example](.env.
 List installed voices with `say -v '?'`. If needed, set `AICOM_TTS_VOICE` for Turkish and
 `AICOM_TTS_VOICE_EN` for English to voices available on your Mac.
 
+The defaults are tuned for a 16 GB Mac: a 6144-token context, three-minute LLM residency,
+two-minute Freya residency, and no startup warmup. This keeps answer quality at the 9B model
+level while returning memory after idle periods. The first turn after an unload takes longer;
+all limits can be adjusted in `.env`. Freya releases its model references and runtime caches
+on a best-effort basis; the operating system may retain some allocator memory for reuse.
+
 ## Run and test
 
 ```bash
