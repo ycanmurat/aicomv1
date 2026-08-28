@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070a12" />
+    <title>AICOM — Yerel Sesli Zekâ</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%2370e5ff' stroke-width='4'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/assets/app.css?v=1" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="AICOM ana sayfa">
+          <span class="brand-mark"></span>
+          <span>AICOM</span>
+          <small>LOCAL</small>
+        </a>
+        <button id="healthButton" class="health" type="button">
+          <span id="healthDot"></span><span id="healthText">Sistem kontrol ediliyor</span>
+        </button>
+      </header>
+
+      <section class="stage">
+        <div class="intro" id="intro">
+          <p class="eyebrow">CİHAZINDA ÇALIŞAN SESLİ DÜŞÜNCE ORTAĞI</p>
+          <h1>Söyle. Anlasın.<br /><em>Düşünüp konuşsun.</em></h1>
+          <p class="lede">Sesin, konuşmaların ve bilgin bu cihazdan çıkmadan.</p>
+        </div>
+
+        <div id="conversation" class="conversation" aria-live="polite"></div>
+
+        <div class="voice-zone">
+          <div id="orbWrap" class="orb-wrap" data-state="idle">
+            <div class="orbit orbit-one"></div>
+            <div class="orbit orbit-two"></div>
+            <button id="micButton" class="orb" type="button" aria-label="Mikrofonu başlat">
+              <span class="orb-core"></span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 15.3a3.4 3.4 0 0 0 3.4-3.4V6.4a3.4 3.4 0 1 0-6.8 0v5.5a3.4 3.4 0 0 0 3.4 3.4Z" />
+                <path d="M18.4 11.3a6.4 6.4 0 0 1-12.8 0M12 17.7V22M8.7 22h6.6" />
+              </svg>
+            </button>
+          </div>
+          <div class="state-line">
+            <strong id="stateText">Başlamak için dokun</strong>
+            <span id="detailText">Mikrofon yalnız yerel işlem için kullanılır</span>
+          </div>
+        </div>
+      </section>
+
+      <form id="textForm" class="composer">
+        <input id="textInput" autocomplete="off" placeholder="Ya da yazarak konuş…" maxlength="8000" />
+        <button type="submit" aria-label="Gönder">
+          <svg viewBox="0 0 24 24"><path d="m5 12 14-7-4.2 14-3.1-5.2L5 12Zm6.7 1.8L19 5" /></svg>
+        </button>
+      </form>
+
+      <footer>
+        <span>16 kHz yerel ses hattı</span><span id="metrics">Hazır</span><span>Ağsız çalışma</span>
+      </footer>
+    </main>
+
+    <dialog id="healthDialog">
+      <button id="closeHealth" class="close" type="button">Kapat</button>
+      <p class="eyebrow">YEREL SİSTEM</p>
+      <h2>Bileşen durumu</h2>
+      <div id="healthDetails"></div>
+    </dialog>
+    <div id="toast" class="toast" role="status"></div>
+    <script src="/assets/app.js?v=4" defer></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+.DS_Store
+.env
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.log
+
+# Yerel model ve çalışma zamanı dosyaları repoya girmez.
+models/*
+!models/.gitkeep
+.runtime/
+.cache/
+
+# Kullanıcıya ait yerel bilgi ve üretilmiş sesler repoya girmez.
+data/*
+!data/knowledge/
+data/knowledge/*
+!data/knowledge/.gitkeep
+!data/audio/
+data/audio/*
+!data/audio/.gitkeep
