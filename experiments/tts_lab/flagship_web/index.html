@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="tr" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="MOSS-TTS v1.5 Qwen3-8B için tamamen yerel Türkçe ses laboratuvarı.">
+  <title>Fatma · MOSS-TTS Laboratuvarı</title>
+  <link rel="stylesheet" href="/static/flagship/style.css">
+  <script type="module" src="/static/flagship/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#laboratory">Laboratuvara geç</a>
+
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Fatma ses laboratuvarı ana sayfası">
+      <span class="brand-mark" aria-hidden="true">F</span>
+      <span>
+        <strong>Fatma</strong>
+        <small>Yerel ses laboratuvarı</small>
+      </span>
+    </a>
+    <div class="header-actions">
+      <div class="connection-pill" id="connection-pill" data-state="loading" role="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="connection-label">Bağlanıyor</span>
+      </div>
+      <button class="icon-button" id="theme-toggle" type="button" aria-label="Koyu temaya geç" title="Temayı değiştir">
+        <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
+        <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.2 8.2 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="laboratory">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">TÜRKÇE SES KALİTESİ / AMİRAL GEMİSİ</p>
+        <h1 id="page-title">Sesi dinle.<br><span>Ölçümü gör.</span></h1>
+      </div>
+      <p class="hero-copy">Tek bir modeli, aynı koşullarda ve aynı cümlelerle sınayın. Sonuçları kulağınızla değerlendirin; hız kararını gerçek RAM, gecikme ve RTF değerleriyle verin.</p>
+    </section>
+
+    <div class="notice" id="error-notice" role="alert" hidden>
+      <span class="notice-icon" aria-hidden="true">!</span>
+      <div><strong>İşlem tamamlanamadı</strong><p id="error-message"></p></div>
+      <button type="button" id="dismiss-error" aria-label="Hata bildirimini kapat">×</button>
+    </div>
+
+    <div class="lab-grid">
+      <section class="panel composer" aria-labelledby="composer-title">
+        <div class="section-heading">
+          <div>
+            <p class="step">01 / METİN</p>
+            <h2 id="composer-title">Fatma ne söylesin?</h2>
+          </div>
+          <span class="language-chip"><span aria-hidden="true">TR</span> Turkish etiketi</span>
+        </div>
+
+        <form id="generate-form" novalidate>
+          <div class="field">
+            <div class="label-row">
+              <label for="speech-text">Seslendirilecek metin</label>
+              <span id="character-count">0 / 600</span>
+            </div>
+            <textarea id="speech-text" name="text" rows="6" minlength="2" maxlength="600" required spellcheck="true">Merhaba, ben Fatma. Size nasıl yardımcı olabilirim?</textarea>
+            <p class="field-error" id="text-error" aria-live="polite"></p>
+          </div>
+
+          <div class="case-picker" aria-labelledby="case-title">
+            <span id="case-title">Hazır test cümleleri</span>
+            <div class="case-list" id="case-list" aria-live="polite">
+              <span class="skeleton-chip"></span><span class="skeleton-chip short"></span><span class="skeleton-chip"></span>
+            </div>
+          </div>
+
+          <div class="form-columns">
+            <div class="field">
+              <label for="voice-select">Ses</label>
+              <div class="select-wrap">
+                <select id="voice-select" name="voice" required aria-describedby="voice-help">
+                  <option value="">Sesler yükleniyor…</option>
+                </select>
+              </div>
+              <p class="field-help" id="voice-help">Preset sesi kullanın veya temiz bir referans yükleyin.</p>
+            </div>
+            <div class="field upload-field">
+              <span class="field-label">Yeni referans ses</span>
+              <label class="upload-button" for="voice-file">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"></path></svg>
+                <span id="upload-label">WAV dosyası seç</span>
+                <input id="voice-file" type="file" accept="audio/wav,.wav" aria-describedby="upload-help">
+              </label>
+              <p class="field-help" id="upload-help">2–15 sn, tek konuşmacı, temiz kayıt. Yalnızca kullanım hakkınız olan ses.</p>
+              <label class="rights-check" for="voice-rights">
+                <input id="voice-rights" type="checkbox">
+                <span>Bu sesi kullanma ve klonlama hakkına sahibim.</span>
+              </label>
+            </div>
+          </div>
+
+          <details class="advanced" id="advanced-settings">
+            <summary>
+              <span>Üretim ayarları</span>
+              <small>Resmî v1.5 varsayılanları</small>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>
+            </summary>
+            <div class="advanced-body">
+              <div class="field instruction-field">
+                <label for="instruction">Konuşma yönlendirmesi <span>isteğe bağlı</span></label>
+                <input id="instruction" name="instruction" type="text" maxlength="180" placeholder="Örn. Sakin, güven veren ve doğal bir tonda konuş.">
+              </div>
+              <div class="parameter-grid">
+                <div class="parameter temperature-parameter">
+                  <span><strong>Temperature</strong><output id="temperature-output" for="temperature">Model varsayılanı</output></span>
+                  <label class="parameter-toggle" for="temperature-enabled">
+                    <input id="temperature-enabled" type="checkbox">
+                    <span>Tek değerle geçersiz kıl</span>
+                  </label>
+                  <input id="temperature" name="temperature" type="range" min="0.1" max="3.0" step="0.1" value="1.7" disabled>
+                </div>
+                <label class="parameter" for="top-p">
+                  <span><strong>Top P</strong><output id="top-p-output" for="top-p">0.8</output></span>
+                  <input id="top-p" name="top_p" type="range" min="0.1" max="1" step="0.05" value="0.8">
+                </label>
+                <label class="parameter" for="top-k">
+                  <span><strong>Top K</strong><output id="top-k-output" for="top-k">25</output></span>
+                  <input id="top-k" name="top_k" type="range" min="1" max="100" step="1" value="25">
+                </label>
+                <label class="parameter" for="repetition-penalty">
+                  <span><strong>Tekrar cezası</strong><output id="repetition-penalty-output" for="repetition-penalty">1.0</output></span>
+                  <input id="repetition-penalty" name="repetition_penalty" type="range" min="0.8" max="1.5" step="0.05" value="1">
+                </label>
+              </div>
+              <button class="text-button" id="reset-parameters" type="button">Varsayılanlara dön</button>
+            </div>
+          </details>
+
+          <div class="submit-row">
+            <button class="primary-button" id="generate-button" type="submit" disabled>
+              <span class="button-ready">Sesi üret <span aria-hidden="true">→</span></span>
+              <span class="button-busy"><span class="spinner" aria-hidden="true"></span> Üretiliyor</span>
+            </button>
+            <p id="form-status" role="status" aria-live="polite">Model durumu kontrol ediliyor.</p>
+          </div>
+        </form>
+      </section>
+
+      <aside class="panel system-card" aria-labelledby="system-title">
+        <div class="section-heading compact">
+          <div><p class="step">MODEL</p><h2 id="system-title">Sistem durumu</h2></div>
+          <button class="refresh-button" id="refresh-status" type="button" title="Durumu yenile" aria-label="Sistem durumunu yenile">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6 6.5L4 11M5.5 15A7 7 0 0 0 18 17.5l2-4.5"></path></svg>
+          </button>
+        </div>
+
+        <div class="model-identity">
+          <span class="model-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div><strong id="model-name">MOSS-TTS v1.5</strong><span>Qwen3-8B · Q4_K</span></div>
+        </div>
+
+        <dl class="system-list">
+          <div><dt>Durum</dt><dd id="model-state"><span class="mini-dot loading"></span> Kontrol ediliyor</dd></div>
+          <div><dt>Dil istemi</dt><dd id="model-language">Turkish (tr)</dd></div>
+          <div><dt>Çalışma ortamı</dt><dd id="runtime-name">Metal · yerel</dd></div>
+          <div><dt>CPU iş parçacığı</dt><dd id="cpu-threads">4</dd></div>
+        </dl>
+
+        <div class="memory-block">
+          <div class="memory-heading"><span>Backend RSS</span><strong id="memory-value">—</strong></div>
+          <div class="memory-track" aria-hidden="true"><span id="memory-bar"></span></div>
+          <p id="memory-note">Model sürecinin gerçek yerleşik belleği. İndirme boyutu değildir.</p>
+        </div>
+
+        <div class="local-note">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.6 3.2 8.8 7.5 9.8 4.3-1 7.5-5.2 7.5-9.8V6L12 3Z"></path><path d="m9 12 2 2 4-4"></path></svg>
+          <p><strong>Tamamen yerel</strong><span>Metin ve ses bu bilgisayardan dışarı çıkmaz.</span></p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="result-section" id="result-section" aria-labelledby="result-title" hidden>
+      <div class="section-heading result-heading">
+        <div><p class="step">02 / SONUÇ</p><h2 id="result-title">Son üretim</h2></div>
+        <span class="result-time" id="result-time"></span>
+      </div>
+      <div class="result-grid">
+        <div class="player-card">
+          <div class="wave-art" aria-hidden="true" id="wave-art"></div>
+          <audio id="result-audio" controls preload="metadata">Tarayıcınız ses oynatmayı desteklemiyor.</audio>
+          <p id="result-text"></p>
+        </div>
+        <dl class="metric-grid">
+          <div><dt>Gecikme</dt><dd id="metric-latency">—</dd><span>istekten WAV'a</span></div>
+          <div><dt>Ses süresi</dt><dd id="metric-duration">—</dd><span>üretilen çıktı</span></div>
+          <div><dt>RTF</dt><dd id="metric-rtf">—</dd><span>&lt; 1 gerçek zamandan hızlı</span></div>
+          <div><dt>Backend RSS</dt><dd id="metric-memory">—</dd><span>üretim sonu</span></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="history-section" aria-labelledby="history-title">
+      <div class="section-heading history-heading">
+        <div><p class="step">GEÇMİŞ</p><h2 id="history-title">Karşılaştırmalı dinleme</h2></div>
+        <button class="text-button" id="refresh-history" type="button">Yenile</button>
+      </div>
+      <p class="section-copy">Aynı cümleyi farklı sesler veya ayarlarla üreterek sonuçları art arda dinleyin.</p>
+      <div class="history-list" id="history-list" aria-live="polite" aria-busy="true">
+        <div class="history-empty"><span class="spinner dark" aria-hidden="true"></span><p>Geçmiş yükleniyor…</p></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>MOSS-TTS v1.5 · Qwen3-8B Q4_K · MOSS Audio Tokenizer</span>
+    <span>Türkçe kalite laboratuvarı · Bulut servisi yok</span>
+  </footer>
+</body>
+</html>

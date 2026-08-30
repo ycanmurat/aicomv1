@@ -6,7 +6,6 @@ import sys
 import time
 from pathlib import Path
 
-
 DEFAULT_TEXTS = (
     "Merhaba, ben Fatma. Size nasıl yardımcı olabilirim?",
     "Elbette, bir saniye kontrol ediyorum.",

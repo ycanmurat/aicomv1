@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fatma · Ses Laboratuvarı</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div><span class="eyebrow">YEREL SES DENEYİ / 01</span><h1>Fatma<span>.</span></h1></div>
+      <span class="badge" id="connection">Bağlanıyor</span>
+    </header>
+    <p class="intro">Önce sesi beğenelim.<br><span>Tek ses, gerçek akış. Karmaşık bir kurulum değil, küçük bir deney.</span></p>
+    <section class="workspace">
+      <div class="main-panel">
+        <div class="tabs" role="tablist" aria-label="Deney modu">
+          <button type="button" role="tab" id="tts-tab" aria-selected="true">Metni seslendir</button>
+          <button type="button" role="tab" id="ask-tab" aria-selected="false">Sor ve dinle</button>
+        </div>
+        <form id="trial-form">
+          <label for="text" id="text-label">Fatma ne söylesin?</label>
+          <textarea id="text" maxlength="600" rows="5" required>Merhaba, ben Fatma. Size nasıl yardımcı olabilirim?</textarea>
+          <div class="samples" id="samples">
+            <button type="button" data-sample="Merhaba, ben Fatma. Size nasıl yardımcı olabilirim?">Karşılama</button>
+            <button type="button" data-sample="Sizi anlıyorum. Bu durumun can sıkıcı olduğunu biliyorum; birlikte bir çözüm bulalım.">Doğallık</button>
+            <button type="button" data-sample="Randevunuz 29 Ağustos günü saat 14.30 için oluşturuldu. Tutar 1.249,90 TL.">Sayı ve tarih</button>
+            <button type="button" data-sample="Randevunuz yirmi dokuz Ağustos günü saat on dört otuz için oluşturuldu. Tutar bin iki yüz kırk dokuz lira doksan kuruş.">Yazıyla sayılar</button>
+          </div>
+          <div id="research-options" hidden>
+            <label class="check"><input id="use-web" type="checkbox"> İnternette araştır</label>
+            <p class="hint">Açarsanız yalnızca bu soru arama sağlayıcısına gönderilir. Fatma arama özetlerini yerel modelle yorumlar; kaynaklar ekranda görünür. Özel bilgi yazmayın.</p>
+            <button type="button" class="secondary" id="record" disabled>Mikrofonla yazdır</button>
+            <p class="hint">En fazla 20 saniye. Yerel Whisper metne çevirir; metni kontrol edip siz gönderirsiniz. Sürekli dinleme yok.</p>
+          </div>
+          <div class="actions">
+            <button id="start" class="primary" type="submit" disabled>Seslendir <span aria-hidden="true">↗</span></button>
+            <button id="stop" class="secondary" type="button" disabled>Durdur</button>
+          </div>
+        </form>
+        <div class="status" role="status" aria-live="polite"><span class="dot" id="activity"></span><span id="status">Ses modeli hazırlanıyor.</span></div>
+        <section id="answer-panel" hidden>
+          <h2>Fatma'nın yanıtı</h2><p id="answer"></p>
+          <div id="sources"></div>
+        </section>
+        <div id="playback" hidden><label for="replay">Son deneyi yeniden dinle</label><audio id="replay" controls></audio><a id="download" download="fatma-deney.wav">WAV dosyasını indir</a></div>
+      </div>
+      <aside>
+        <span class="eyebrow">BU OTURUM</span>
+        <h2>MOSS-TTS-Nano</h2><p class="subtle">ONNX · CPU · gerçek ses akışı</p>
+        <dl class="engine-info"><dt>Referans sesi</dt><dd id="reference-name">—</dd><dt>Yanıt modeli</dt><dd id="llm-name">—</dd></dl>
+        <audio id="reference-player" controls hidden aria-label="Referans sesini dinle"></audio>
+        <label class="file-label" for="reference-file">Farklı bir referans dene<input id="reference-file" type="file" accept="audio/wav,.wav"></label>
+        <p class="hint">2–15 saniyelik temiz WAV; tek konuşmacı. Yalnızca kullanım hakkınız olan sesleri seçin. Dosyanın kopyası bu bilgisayarda kalır.</p>
+        <div class="divider"></div>
+        <span class="eyebrow">ÖLÇÜM</span>
+        <div class="metrics">
+          <div><strong id="first-pcm">—</strong><span>İlk yanıt PCM'i</span></div>
+          <div><strong id="playback-start">—</strong><span>Planlanan ilk yanıt sesi</span></div>
+          <div><strong id="rtf">—</strong><span>TTS üretim / ses süresi</span></div>
+          <div><strong id="chunks">—</strong><span>Ses paketi</span></div>
+        </div>
+        <p class="hint" id="memory">Bellek ölçülüyor.</p>
+        <p class="hint" id="gaps">PCM süresi hoparlör gecikmesi değildir. Bekleme ifadesi yanıt olarak sayılmaz.</p>
+        <details><summary>Deney sınırları</summary><p class="hint">Sıfır gecikme veya kusursuz Türkçe garantisi yok. RTF 1'in altındaysa üretim konuşmadan hızlıdır. İlk yanıt süresi, soru modunda araştırma ve düşünmeyi de içerir. Rakamlar otomatik çevrilmez; yazıyla karşılaştırın. Başka bir sese otomatik geçilmez.</p></details>
+      </aside>
+    </section>
+    <footer><span>Bulut modeli yok. Üyelik yok. Tek aktif deney.</span><span id="privacy">Ses üretimi tamamen yerel.</span></footer>
+  </main>
+</body>
+</html>
